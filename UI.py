@@ -1,9 +1,26 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QWidget, QPushButton, QFileDialog, QMainWindow, QGridLayout, QLabel
+
+from PyQt6.QtWidgets import QApplication, QWidget, QPushButton, QFileDialog, QMainWindow, QGridLayout, QLabel, QTextEdit
+from PyQt6.QtCore import pyqtSlot, QThread, pyqtSignal, QObject
+from PyQt6.QtGui import QTextCursor
+
 from magnify import magnify
+class EmittingStream(QObject):
+    textWritten = pyqtSignal(str)
+
+    def write(self, text):
+        self.textWritten.emit(str(text))
+
+    def flush(self):
+        pass
+
+
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
+
+        # Setup the EmittingStream object and redirect the stdout to this stream
+        sys.stdout = EmittingStream(textWritten=self.normalOutputWritten)
 
         self.title = 'Vessel Extraction and Magnification App'
         self.left = 10
@@ -46,12 +63,16 @@ class App(QMainWindow):
         self.btn_magnify.setEnabled(False)
         layout.addWidget(self.btn_magnify, 2, 1)
 
+        # Add a QTextEdit widget to show the processing output
+        self.processing_output = QTextEdit()
+        layout.addWidget(self.processing_output, 3, 0, 1, 2)
+
         self.setCentralWidget(widget)
 
     def openFileNameDialog(self):
         fileName, _ = QFileDialog.getOpenFileName(self, "Select Video File", "", "Video Files (*.mp4 *.avi)")
         if fileName:
-            print(f'File path: {fileName}')
+            print(f'You select file successfully: {fileName}')
             self.fileName = fileName
             self.btn_extract.setEnabled(True)
             self.btn_magnify.setEnabled(True)
@@ -71,6 +92,15 @@ class App(QMainWindow):
         elif action == "magnify":
             print("Magnifying vessel...")
             magnify(fileName)
+
+    @pyqtSlot(str)
+    def normalOutputWritten(self, text):
+        """Append text to the QTextEdit."""
+        cursor = self.processing_output.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText(text)
+        self.processing_output.setTextCursor(cursor)
+        self.processing_output.ensureCursorVisible()
 
 
 if __name__ == '__main__':

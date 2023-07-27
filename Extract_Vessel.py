@@ -71,8 +71,11 @@ def remove_border(im, left, right, bottom, top):
 
     return im
 
+
 def Vessel_Extract_Video(inputvideo,outputpath):
     # Open the input video
+    if not os.path.exists('vessel_frames'):
+        os.makedirs('vessel_frames')
     cap = cv2.VideoCapture(inputvideo)
     if not cap.isOpened():
         print("Error opening video file")
@@ -127,6 +130,7 @@ def Vessel_Extract_Video(inputvideo,outputpath):
     # Release video capture and writer
     cap.release()
     # out.release()
+    frames_to_video('vessel_frames',outputpath)
 
     print("Video processing complete.")
 

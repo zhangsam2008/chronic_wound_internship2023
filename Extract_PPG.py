@@ -232,14 +232,14 @@ def extract_frames(video_path, output_dir):
 
     print("Frames extraction completed.")
 
-def Find_PPG(video_path, output_dir='video_frames', win_size=5, channel=3, step=1, clean_area=-1, K=3, roi_start=1000, roi_end=1009,fps=20):
+def Find_PPG(video_path, fps=20,output_dir='video_frames', win_size=5, channel=3, step=1, clean_area=-1, K=3, roi_start=1000, roi_end=1009):
     extract_frames(video_path, output_dir)
     green_dir = os.path.join("green")
     if not os.path.exists(green_dir):
         os.makedirs(green_dir)
     extract_green_frames(output_dir, green_dir, win_size, channel, step, clean_area, K)
     ppg = compute_ppg_signal('green', roi_start, roi_end)
-    find_frequency_range(ppg, 20)
+    find_frequency_range(ppg, fps)
     return ppg
 
 if __name__ == '__main__':

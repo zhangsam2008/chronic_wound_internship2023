@@ -205,6 +205,7 @@ def find_frequency_range(rppg_signals, sampling_rate):
     plt.show()
 
     print("Peak Frequency (Hz):", peak_frequency)
+    return peak_frequency
 def extract_frames(video_path, output_dir):
     # Create the output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
@@ -239,8 +240,8 @@ def Find_PPG(video_path, fps=20,output_dir='video_frames', win_size=5, channel=3
         os.makedirs(green_dir)
     extract_green_frames(output_dir, green_dir, win_size, channel, step, clean_area, K)
     ppg = compute_ppg_signal('green', roi_start, roi_end)
-    find_frequency_range(ppg, fps)
-    return ppg
+    peak_frequency=find_frequency_range(ppg, fps)
+    return peak_frequency
 
 if __name__ == '__main__':
     Find_PPG('right_940_20fps_gain4_polarized_synced.avi')

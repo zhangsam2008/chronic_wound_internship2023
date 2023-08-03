@@ -1,16 +1,18 @@
+import os
 import sys
 import PyQt6.uic
-from PyQt6.QtWidgets import QApplication, QWidget, QPushButton, QFileDialog, QMainWindow, QGridLayout, QLabel, \
-    QTextEdit, QVBoxLayout, QHBoxLayout, QListView, QStyle, QSlider, QStatusBar
-from PyQt6.QtCore import pyqtSlot, QThread, pyqtSignal, QObject, QCoreApplication, Qt, QStringListModel, QSize, QUrl
-from PyQt6.QtGui import QTextCursor
-from PyQt6.QtWidgets import QApplication, QLabel, QPushButton, QTreeView, QVBoxLayout, QWidget
-#from Extract_PPG import Find_PPG
-#from Extract_Vessel import Vessel_Extract_Video
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QVideoWidget
-#from magnify import magnify
+from PyQt6.QtWidgets import QApplication, QWidget, QPushButton, QFileDialog, QMainWindow, QGridLayout, QLabel, \
+    QTextEdit, QVBoxLayout, QHBoxLayout, QListView, QStyle, QSlider, QStatusBar
+from PyQt6.QtCore import pyqtSlot, QThread, pyqtSignal, QObject, QCoreApplication, Qt, QStringListModel, QSize
+from PyQt6.QtGui import QTextCursor, QPixmap
+from PyQt6.QtWidgets import QApplication, QLabel, QPushButton, QTreeView, QVBoxLayout, QWidget
+from Extract_PPG import Find_PPG
+from Extract_Vessel import Vessel_Extract_Video
+from magnify import magnify
 from datetime import datetime
+import matplotlib.pyplot as plt
 
 class EmittingStream(QObject):
     textWritten = pyqtSignal(str)
@@ -27,10 +29,10 @@ class Worker(QThread):
         self.fileName = None
         self.action = None
         self.ppg = None
+        self.fre = None
     def run(self):
         if self.action == 'find_ppg':
-            self.ppg=Find_PPG(self.fileName)
-
+            self.ppg,self.fre=Find_PPG(self.fileName)
         elif self.action == 'extract':
             Vessel_Extract_Video(self.fileName, 'vessel.mp4')
         elif self.action == 'magnify':
@@ -46,6 +48,7 @@ class App(QMainWindow):
         self.top = 10
         self.width = 800
         self.height = 600
+        self.fileName = None
         self.selectedFiles = QStringListModel(self)
         self.selectedFiles.dataChanged.connect(self.updateFileListView)
         self.initUI()
@@ -101,9 +104,12 @@ class App(QMainWindow):
         #Column 2: PPG Chart and Video/Frame display
         column2_layout = QVBoxLayout()
         main_layout.addLayout(column2_layout)
-        chart_label = QLabel("Chart Placeholder", self)  # Replace with actual chart widget
 
-        column2_layout.addWidget(chart_label, 35)
+        # Create QLabel widgets for the chart and video frame
+        self.chart_label = QLabel(self)  # QLabel to display the chart image
+
+        column2_layout.addWidget(self.chart_label, 35)
+
         # Video Player
         self.mediaPlayer = QMediaPlayer()
         btnSize = QSize(16, 16)
@@ -137,6 +143,7 @@ class App(QMainWindow):
         self.mediaPlayer.durationChanged.connect(self.durationChanged)
         self.mediaPlayer.errorChanged.connect(self.handleError)
         self.statusBar.showMessage("Ready")
+
         # Column 3: Date Time PPG HeartRate, Extract and Magnify Buttons, and Processing message panel
         column3_layout = QVBoxLayout()
         main_layout.addLayout(column3_layout)
@@ -204,6 +211,28 @@ class App(QMainWindow):
         main_layout.setStretch(2, 30)
 
         self.setCentralWidget(main_widget)
+
+    def plot_ppg_chart(self, ppg_data):
+        # Clear any previous chart
+        self.chart_label.clear()
+
+        # Plot the chart and save it as a temporary image file
+        plt.plot(ppg_data)
+        plt.xlabel('Frame')
+        plt.ylabel('PPG Signal')
+        plt.title('Computed PPG Signal')
+        chart_image_path = 'temp_chart.png'
+        plt.savefig(chart_image_path)
+
+        # Load the image and set it to the chart_label
+        chart_image = QPixmap(chart_image_path)
+        self.chart_label.setPixmap(chart_image)
+
+        # Remove the temporary image file
+        os.remove(chart_image_path)
+
+        # Show the chart
+        self.chart_label.show()
     def onDirectoryClicked(self, index):
         # This method will be triggered when the user clicks on an item in the QTreeView
         file_info = self.fileModel.fileInfo(index)
@@ -221,27 +250,41 @@ class App(QMainWindow):
             self.selectedFiles.setStringList(self.selectedFiles.stringList() + [fileName])
             self.btn_extract.setEnabled(True)
             self.btn_magnify.setEnabled(True)
-            self.mediaPlayer.setSource(QUrl.fromLocalFile(fileName))
-            self.playButton.setEnabled(True)
-            self.statusBar.showMessage("Playing")
-            self.play()
 
     @pyqtSlot()
     def updateFileListView(self):
         self.fileListView.setModel(self.selectedFiles)
     def onFileClicked(self, index):
-        # This method will be triggered when the user clicks on an item in the QListView
         fileName = self.selectedFiles.data(index)
         print(f'You selected file: {fileName}')
     def extract_vessel(self):
         if self.fileName:
             self.do_something_with_file(self.fileName, "extract")
+        else:
+            print('Need choose file first')
     def find_ppg(self):
         if self.fileName:
             self.do_something_with_file(self.fileName, "find_ppg")
+            self.worker.finished.connect(self.on_ppg_computed)
+        else:
+            print('Need choose file first')
+
+    def on_ppg_computed(self):
+        ppg = self.worker.ppg
+        self.plot_ppg_chart(ppg)
+        current_datetime = datetime.now()
+        current_date = current_datetime.date()
+        current_time = current_datetime.time()
+        date_str = current_date.strftime("%Y-%m-%d")
+        time_str = current_time.strftime("%H:%M:%S")
+        fre_str = str(self.worker.fre)
+        bpm_str = str((self.worker.fre) * 60) +'BPM'
+        self.update_detected_values(date_str, time_str,fre_str , bpm_str)
     def magnify_vessel(self):
         if self.fileName:
             self.do_something_with_file(self.fileName, "magnify")
+        else:
+            print('Need choose file first')
 
     def do_something_with_file(self, fileName, action):
         if self.worker.isRunning():
@@ -250,27 +293,21 @@ class App(QMainWindow):
             self.worker.fileName = self.fileName
             self.worker.action = action
             self.worker.start()
-            current_datetime = datetime.now()
-            current_date = current_datetime.date()
-            current_time = current_datetime.time()
-            date_str = current_date.strftime("%Y-%m-%d")
-            time_str = current_time.strftime("%H:%M:%S")
-            self.update_detected_values(date_str, time_str,"2","2")
+
     def update_detected_values(self, date, time, ppg, heart_rate):
         # Update the detected values for Date, Time, PPG, and Heart Rate
         self.detected_date.setText(date)
         self.detected_time.setText(time)
         self.detected_ppg_fre.setText(ppg)
         self.detected_heart_rate.setText(heart_rate)
-    def abrir(self):
-        fileName, _ = QFileDialog.getOpenFileName(self, "Select Media",
-                ".", "Video Files (*.mp4 *.flv *.ts *.mts *.avi)")
-
-        if fileName != '':
-            self.mediaPlayer.setSource(QUrl.fromLocalFile(fileName))
-            self.playButton.setEnabled(True)
-            self.statusBar.showMessage(fileName)
-            self.play()
+    @pyqtSlot(str)
+    def normalOutputWritten(self, text):
+        """Append text to the QTextEdit."""
+        cursor = self.processing_output.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText(text)
+        self.processing_output.setTextCursor(cursor)
+        self.processing_output.ensureCursorVisible()
 
     def play(self):
         if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
@@ -278,6 +315,8 @@ class App(QMainWindow):
         else:
             self.mediaPlayer.play()
 
+    def setPosition(self, position):
+        self.mediaPlayer.setPosition(position)
     def mediaStateChanged(self, state):
         if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.playButton.setIcon(
@@ -292,22 +331,9 @@ class App(QMainWindow):
     def durationChanged(self, duration):
         self.positionSlider.setRange(0, duration)
 
-    def setPosition(self, position):
-        self.mediaPlayer.setPosition(position)
-
     def handleError(self):
         self.playButton.setEnabled(False)
         self.statusBar.showMessage("Error: " + self.mediaPlayer.errorString())
-    @pyqtSlot(str)
-    def normalOutputWritten(self, text):
-        """Append text to the QTextEdit."""
-        cursor = self.processing_output.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.insertText(text)
-        self.processing_output.setTextCursor(cursor)
-        self.processing_output.ensureCursorVisible()
-
-
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     ex = App()

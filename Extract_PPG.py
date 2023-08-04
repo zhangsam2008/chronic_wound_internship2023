@@ -143,7 +143,6 @@ def compute_ppg_signal(frames_directory, roi_start, roi_end):
 
 def find_frequency_range(rppg_signals, sampling_rate):
     # Perform Fourier Transform on the rPPG signals
-    print('a')
     fft_signal = np.fft.fft(rppg_signals)
 
     # Compute the power spectrum
@@ -195,7 +194,7 @@ def find_frequency_range(rppg_signals, sampling_rate):
     # plt.legend()
     # plt.show()
 
-    print("Frequency (Hz):", peak_frequency)
+    print("We detected PPG Frequency (Hz):", peak_frequency)
     return peak_frequency
 def removed_background(img_label,after_x=0):
     mask = np.zeros(img_label.shape)
@@ -264,11 +263,11 @@ def extract_frames(input_video, output_dir):
     print("Video processing complete.")
 
 def Find_PPG(video_path, videoframes='video_frames', win_size=5, channel=3, step=1, clean_area=-1, K=3, roi_start=1000, roi_end=1009,fps=20):
-    # extract_frames(video_path, videoframes)
-    # green_dir = os.path.join("green")
-    # if not os.path.exists(green_dir):
-    #     os.makedirs(green_dir)
-    # extract_green_frames(videoframes, green_dir, win_size, channel, step, clean_area, K)
+    extract_frames(video_path, videoframes)
+    green_dir = os.path.join("green")
+    if not os.path.exists(green_dir):
+        os.makedirs(green_dir)
+    extract_green_frames(videoframes, green_dir, win_size, channel, step, clean_area, K)
     ppg = compute_ppg_signal('green', roi_start, roi_end)
 
     fre = find_frequency_range(ppg, 20)

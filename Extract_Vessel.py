@@ -135,6 +135,9 @@ def Vessel_Extract_Video(inputvideo,outputpath):
     frames_to_video('vessel_frames',outputpath)
 
     print("Video processing complete.")
+    outputpath = os.path.join(os.getcwd(), outputpath)
+
+    return outputpath
 
 from moviepy.editor import ImageSequenceClip
 

@@ -30,12 +30,13 @@ def vascular_map(img_,black_ridges=True,sigmas=14,method=sato):
     result[vascular_pixel] = (vessels - np.min(vessels))/(np.max(vessels)-np.min(vessels))
     return result
 
-def removed_background(img_label,after_x):
+def removed_background(img_label,after_x=0):
     mask = np.zeros(img_label.shape)
     background_label = img_label[0][-1]
     obj = np.where(img_label!=background_label)
     mask[obj] = 1
-    mask[:,after_x:]=0
+    if after_x!=0:
+        mask[:,after_x:]=0
     mask = np.repeat(mask[:,:,None],3,axis=-1)
     return mask
 
@@ -74,6 +75,8 @@ def remove_border(im, left, right, bottom, top):
 
 def Vessel_Extract_Video(inputvideo,outputpath):
     # Open the input video
+    print("Extracting Vessel from video")
+    print(inputvideo)
     if not os.path.exists('vessel_frames'):
         os.makedirs('vessel_frames')
     cap = cv2.VideoCapture(inputvideo)
@@ -106,10 +109,9 @@ def Vessel_Extract_Video(inputvideo,outputpath):
         # Segment feet in the frame
         res_im, im_label = segment_feet(im)
         # Compute the mask for the feet
-        # mask_im = removed_background(im_label, 1300)
-        # im = im * mask_im
-        # frame_resized = im
-        # im = im[:, :1300]
+        mask_im = removed_background(im_label)
+        im = im * mask_im
+        frame_resized = im
         # Compute the vessel map
         im_green = np.int64(im[:, :, 1])
         im_idx = np.where(im_green > 0)

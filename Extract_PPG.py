@@ -3,9 +3,11 @@ import matplotlib.pyplot as plt
 import cv2
 import os
 from patchify import patchify,unpatchify
+from matplotlib.colors import LinearSegmentedColormap
 
-def segment_feet(img, K):
-    twoDimage = img.reshape((-1, 3))
+def segment_feet(img, K=3):
+    img1=img[:,:,:3]
+    twoDimage = img1.reshape((-1, 3))
     twoDimage = np.float32(twoDimage)
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
     attempts = 10
@@ -13,8 +15,8 @@ def segment_feet(img, K):
     ret, label, center = cv2.kmeans(twoDimage, K, None, criteria, attempts, cv2.KMEANS_PP_CENTERS)
     center = np.uint8(center)
     res = center[label.flatten()]
-    label = label.reshape(img.shape[:2])
-    result_image = res.reshape((img.shape))
+    label = label.reshape(img1.shape[:2])
+    result_image = res.reshape((img1.shape))
 
     return result_image, label
 
@@ -26,7 +28,6 @@ def average_img_patches(segemented_img, win_size, channel, step):
     segment_patch = patchify(segemented_img, (win_size, win_size), step)
     segment_patch_mean = np.mean(segment_patch, (2, 3))
     segment_patch_std = np.std(segment_patch, (2, 3))
-    print("patch dim:", segment_patch_mean.shape, segment_patch.shape, segment_patch_std.shape)
 
     segemented_patch_zeros = np.zeros(segment_patch.shape)
 
@@ -38,7 +39,6 @@ def average_img_patches(segemented_img, win_size, channel, step):
     segment_patch_std = np.repeat(segment_patch_std[:, :, None], win_size, axis=2)
     segment_patch_std = np.repeat(segment_patch_std[:, :, :, None], win_size, axis=3)
 
-    print("patch dim:", segment_patch_mean.shape, segment_patch.shape, segment_patch_std.shape)
 
     segment_patch_ = segemented_patch_zeros + segment_patch_mean
 
@@ -58,7 +58,6 @@ def ppg_amplitude_mapping(img1, img2, mask, sequence):
     for c in clusters:
         if c == background_label:
             continue
-        print("cluster: #%d" % c)
 
         cluster_im = np.zeros(img1.shape)
         obj_indices = np.where(mask == c)
@@ -100,14 +99,13 @@ def process_img(img, win_size=5, channel=3, step=1, clean_area=-1, K=3, directio
         temp_mask[clean_area:, :] = 0
 
     temp_mask = np.repeat(temp_mask[:, :, None], 3, axis=2)
-    segemented_img = img * temp_mask
+    segemented_img = img[:,:,:3] * temp_mask
 
-    print(segemented_img[:, :, 1].shape)
     segemented_img = average_img_patches(segemented_img[:, :, 1], win_size, channel, step)
     return segemented_img, label, img
 
 
-def extract_green_frames(video_frames_dir, output_dir, win_size, channel, step, clean_area, K):
+def extract_green_frames(video_frames_dir, green_dir, win_size, channel, step, clean_area, K):
     video_filenames = sorted(os.listdir(video_frames_dir))
     n = 1
     for video_filename in video_filenames:
@@ -120,7 +118,7 @@ def extract_green_frames(video_frames_dir, output_dir, win_size, channel, step, 
         img1, label1, ori_img1 = process_img(video_frame, win_size, channel, step, clean_area, K)
         img1_g = img1.copy()
         output_filename = f"frames_{n}.png"
-        output_path = os.path.join(output_dir, output_filename)
+        output_path = os.path.join(green_dir, output_filename)
         # img1 = img1.astype(np.uint8)
         # img1_rgb = cv2.cvtColor(img1, cv2.COLOR_GRAY2RGB)
         plt.imsave(output_path, img1_g)
@@ -128,29 +126,24 @@ def extract_green_frames(video_frames_dir, output_dir, win_size, channel, step, 
     print("extract green done")
 
 def compute_ppg_signal(frames_directory, roi_start, roi_end):
+    print('computing ppg')
     video_green_channel = []
     for i in range(1, len(os.listdir(frames_directory)) + 1):
+        print(i)
         frame_path = os.path.join(frames_directory, f"frames_{i}.png")
-        frame = cv2.imread(frame_path)[:,:,1]  # Extract the green channel
+        frame = cv2.imread(frame_path)[:, :, 1]  # Extract the green channel
         video_green_channel.append(frame)
-
     video_green_channel = np.array(video_green_channel)
     video_green_channel = video_green_channel[100:]
-
     traditional_ppg = video_green_channel[:, roi_start:roi_end, roi_start:roi_end]
     traditional_ppg_res = np.mean(traditional_ppg, axis=(1, 2))[90:125]
     traditional_ppg_res = (traditional_ppg_res - np.min(traditional_ppg_res)) / (
-                np.max(traditional_ppg_res) - np.min(traditional_ppg_res))
-
-    plt.plot(traditional_ppg_res)
-    plt.xlabel('Frame')
-    plt.ylabel('PPG Signal')
-    plt.title('Computed PPG Signal')
-    plt.show()
+            np.max(traditional_ppg_res) - np.min(traditional_ppg_res))
     return traditional_ppg_res
 
 def find_frequency_range(rppg_signals, sampling_rate):
     # Perform Fourier Transform on the rPPG signals
+    print('a')
     fft_signal = np.fft.fft(rppg_signals)
 
     # Compute the power spectrum
@@ -187,63 +180,99 @@ def find_frequency_range(rppg_signals, sampling_rate):
                 max_consecutive_rise_index = i + 1
         else:
             consecutive_rise = 0
-
     # Calculate the peak frequency in Hz if consecutive rise is sufficient
     if max_consecutive_rise * freq_resolution >= 0.1:
-        print("Consecutive rise detected")
         peak_frequency = (main_energy_start + max_consecutive_rise_index) * freq_resolution
     else:
         peak_frequency = (main_energy_start + peak_index) * freq_resolution
 
     # Plot the power spectrum
-    frequencies = np.arange(len(power_spectrum)) * freq_resolution
-    plt.plot(frequencies, power_spectrum)
-    plt.xlabel('Frequency (Hz)')
-    plt.ylabel('Power Spectrum')
-    plt.axvline(x=peak_frequency, color='r', linestyle='--', label='Peak Hz')
-    plt.legend()
-    plt.show()
+    # frequencies = np.arange(len(power_spectrum)) * freq_resolution
+    # plt.plot(frequencies, power_spectrum)
+    # plt.xlabel('Frequency (Hz)')
+    # plt.ylabel('Power Spectrum')
+    # plt.axvline(x=peak_frequency, color='r', linestyle='--', label='Peak Hz')
+    # plt.legend()
+    # plt.show()
 
-    print("Peak Frequency (Hz):", peak_frequency)
+    print("Frequency (Hz):", peak_frequency)
     return peak_frequency
-def extract_frames(video_path, output_dir):
-    # Create the output directory if it doesn't exist
+def removed_background(img_label,after_x=0):
+    mask = np.zeros(img_label.shape)
+    background_label = img_label[0][-1]
+    obj = np.where(img_label!=background_label)
+    mask[obj] = 1
+    if after_x!=0:
+        mask[:,after_x:]=0
+    mask = np.repeat(mask[:,:,None],3,axis=-1)
+    return mask
+def extract_frames(input_video, output_dir):
+    # Open the input video
+    cap = cv2.VideoCapture(input_video)
+    if not cap.isOpened():
+        print("Error opening video file")
+        return
+
+    # Get video properties
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    # Prepare output directory
     os.makedirs(output_dir, exist_ok=True)
 
-    # Open the video file
-    video = cv2.VideoCapture(video_path)
+    # Prepare color map
+    colors = [(0, 0, 0), (1, 0, 0)]
+    cm = LinearSegmentedColormap.from_list("Custom", colors, N=20)
 
-    frame_counter = 0
-    while True:
-        # Read the next frame from the video
-        ret, frame = video.read()
+    frame_counter = 1
 
+    while cap.isOpened():
+        ret, frame = cap.read()
         if not ret:
-            break  # End of video
+            break
 
-        # Save the frame as an image
-        frame_filename = f"frames_{frame_counter}.png"
-        frame_path = os.path.join(output_dir, frame_filename)
-        cv2.imwrite(frame_path, frame)
+        # Preprocess the frame
+        im = frame[:-1 * (frame.shape[0] % 100), :-1 * (frame.shape[1] % 100)]
 
+        # Segment feet in the frame
+        res_im, im_label = segment_feet(im)
+
+        # Compute the mask for the feet
+        mask_im = removed_background(im_label)
+        im = im * mask_im
+        frame_resized = im
+
+
+        # Compute the vessel map
+        im_green = np.int64(im[:, :, 1])
+        im_idx = np.where(im_green > 0)
+        tile_pixel = np.min(im_green[im_idx])
+        background_idx = np.where(im_green == 0)
+        im_green[background_idx] = tile_pixel
+
+        # Convert the grayscale image to 3-channel
+        frames_filename = f"frames_{frame_counter}.png"
+        frames_path = os.path.join(output_dir, frames_filename)
+        plt.imsave(frames_path, im_green, cmap="gray")
+
+        print(f"Processing frame {frame_counter}/{total_frames}")
         frame_counter += 1
 
-    # Release the video file
-    video.release()
+    # Release video capture
+    cap.release()
 
-    print("Frames extraction completed.")
+    print("Video processing complete.")
 
-def Find_PPG(video_path, fps=20,output_dir='video_frames', win_size=5, channel=3, step=1, clean_area=-1, K=3, roi_start=1000, roi_end=1009):
-    extract_frames(video_path, output_dir)
-    green_dir = os.path.join("green")
-    if not os.path.exists(green_dir):
-        os.makedirs(green_dir)
-    extract_green_frames(output_dir, green_dir, win_size, channel, step, clean_area, K)
+def Find_PPG(video_path, videoframes='video_frames', win_size=5, channel=3, step=1, clean_area=-1, K=3, roi_start=1000, roi_end=1009,fps=20):
+    # extract_frames(video_path, videoframes)
+    # green_dir = os.path.join("green")
+    # if not os.path.exists(green_dir):
+    #     os.makedirs(green_dir)
+    # extract_green_frames(videoframes, green_dir, win_size, channel, step, clean_area, K)
     ppg = compute_ppg_signal('green', roi_start, roi_end)
-    peak_frequency=find_frequency_range(ppg, fps)
-    return peak_frequency
+
+    fre = find_frequency_range(ppg, 20)
+    return ppg , fre
 
 if __name__ == '__main__':
     Find_PPG('right_940_20fps_gain4_polarized_synced.avi')
-
-

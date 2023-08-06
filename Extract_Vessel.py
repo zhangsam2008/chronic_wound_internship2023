@@ -79,6 +79,8 @@ def Vessel_Extract_Video(inputvideo,outputpath):
     print(inputvideo)
     if not os.path.exists('vessel_frames'):
         os.makedirs('vessel_frames')
+    if not os.path.exists('video_frames'):
+        os.makedirs('video_frames')
     cap = cv2.VideoCapture(inputvideo)
     if not cap.isOpened():
         print("Error opening video file")

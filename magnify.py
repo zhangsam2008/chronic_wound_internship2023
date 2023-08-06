@@ -5,6 +5,7 @@ from Extract_Vessel import Vessel_Extract_Video, Overlay_Vessel_Video,segment_fe
 from PyEVM import magnify_color, magnify_motion
 
 def magnify(video):
+    print('Magnifying')
     fre=Find_PPG(video)
     low=(fre-0.2)/2
     high=(fre+0.2)/2
